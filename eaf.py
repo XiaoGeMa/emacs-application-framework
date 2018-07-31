@@ -19,16 +19,21 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+# NOTE
+# QtWebEngine will throw error "ImportError: QtWebEngineWidgets must be imported before a QCoreApplication instance is created"
+# So we import browser module before start Qt application instance to avoid this error, but we never use this module.
+from app.browser.buffer import AppBuffer as NeverUsed # noqa
+
+from PyQt5.QtNetwork import QNetworkProxy
 from PyQt5.QtWidgets import QApplication
 from core.fake_key_event import fake_key_event
-from core.utils import file_is_image, file_is_video
 from core.view import View
 from dbus.mainloop.glib import DBusGMainLoop
-import importlib
 import dbus
 import dbus.service
-import os
+import importlib
 import json
+import os
 
 EAF_DBUS_NAME = "com.lazycat.eaf"
 EAF_OBJECT_NAME = "/com/lazycat/eaf"
@@ -42,7 +47,12 @@ class EAF(dbus.service.Object):
             dbus.service.BusName(EAF_DBUS_NAME, bus=dbus.SessionBus()),
             EAF_OBJECT_NAME)
 
-        (emacs_xid, emacs_width, emacs_height) = (map(lambda x: int(x), args))
+        # (emacs_xid, emacs_width, emacs_height, proxy_host, proxy_port) = (map(lambda x: int(x), args))
+        (emacs_xid, emacs_width, emacs_height, proxy_host, proxy_port) = args
+        emacs_xid = int(emacs_xid)
+        emacs_width = int(emacs_width)
+        emacs_height = int(emacs_height)
+
         self.buffer_dict = {}
         self.view_dict = {}
 
@@ -50,11 +60,19 @@ class EAF(dbus.service.Object):
 
         self.session_file_path = os.path.expanduser("~/.emacs.d/eaf/session.json")
 
-    @dbus.service.method(EAF_DBUS_NAME, in_signature="sss", out_signature="s")
-    def new_buffer(self, buffer_id, url, app_name):
+        # Set HTTP proxy.
+        if proxy_host != "" and proxy_port != "":
+            proxy = QNetworkProxy()
+            proxy.setType(QNetworkProxy.HttpProxy)
+            proxy.setHostName(proxy_host)
+            proxy.setPort(int(proxy_port))
+            QNetworkProxy.setApplicationProxy(proxy)
+
+    @dbus.service.method(EAF_DBUS_NAME, in_signature="ssss", out_signature="s")
+    def new_buffer(self, buffer_id, url, app_name, arguments):
         # NOTE: We need use function str convert dbus.String to String,
         # otherwise some library will throw error, such as fitz library.
-        return self.create_app(buffer_id, str(url), "app.{0}.buffer".format(str(app_name)))
+        return self.create_app(buffer_id, str(url), "app.{0}.buffer".format(str(app_name)), str(arguments))
 
     @dbus.service.method(EAF_DBUS_NAME, in_signature="sss", out_signature="")
     def update_buffer_with_url(self, module_path, buffer_url, update_data):
@@ -69,19 +87,48 @@ class EAF(dbus.service.Object):
         if buffer_id in self.buffer_dict:
             self.buffer_dict[buffer_id].scroll(scroll_direction, scroll_type)
 
-    def create_app(self, buffer_id, url, module_path):
+    def get_new_browser_window_buffer_id(self):
+        import secrets
+
+        return "{0}-{1}-{2}-{3}-{4}-{5}-{6}".format(
+            secrets.token_hex(2),
+            secrets.token_hex(2),
+            secrets.token_hex(2),
+            secrets.token_hex(2),
+            secrets.token_hex(2),
+            secrets.token_hex(2),
+            secrets.token_hex(2))
+
+    def create_new_browser_window(self):
+        # Generate buffer id same as eaf.el does.
+        buffer_id = self.get_new_browser_window_buffer_id()
+
+        # Create buffer for create new browser window.
+        app_buffer = self.create_buffer(buffer_id, "http://0.0.0.0", "app.browser.buffer", "")
+
+        # Create emacs buffer with buffer id.
+        self.create_new_browser_buffer(buffer_id)
+
+        # Return new QWebEngineView for create new browser window.
+        return app_buffer.buffer_widget
+
+    def create_app(self, buffer_id, url, module_path, arguments):
         try:
-            module = importlib.import_module(module_path)
-            buf = module.AppBuffer(buffer_id, url)
-            buf.module_path = module_path
-            self.create_buffer(buffer_id, buf)
+            self.create_buffer(buffer_id, url, module_path, arguments)
 
             return ""
         except ImportError:
+            import traceback
+            traceback.print_exc()
             return "Something wrong when import {0}".format(module_path)
 
-    def create_buffer(self, buffer_id, app_buffer):
+    def create_buffer(self, buffer_id, url, module_path, arguments):
         global emacs_width, emacs_height
+
+        # Create application buffer.
+        module = importlib.import_module(module_path)
+        app_buffer = module.AppBuffer(buffer_id, url, arguments)
+        app_buffer.module_path = module_path
 
         # Add buffer to buffer dict.
         self.buffer_dict[buffer_id] = app_buffer
@@ -97,8 +144,20 @@ class EAF(dbus.service.Object):
         # Send message to emacs.
         app_buffer.input_message.connect(self.input_message)
 
+        # Handle buffer close request.
+        app_buffer.close_buffer.connect(self.request_kill_buffer)
+
+        # Handle message to emacs.
+        app_buffer.message_to_emacs.connect(self.message_to_emacs)
+
+        # Add create new window callback if module is browser
+        if module_path == "app.browser.buffer":
+            app_buffer.buffer_widget.create_new_browser_window_callback = self.create_new_browser_window
+
         # Restore buffer session.
         self.restore_buffer_session(app_buffer)
+
+        return app_buffer
 
     @dbus.service.method(EAF_DBUS_NAME, in_signature="s", out_signature="")
     def update_views(self, args):
@@ -174,14 +233,16 @@ class EAF(dbus.service.Object):
             self.buffer_dict[buffer_id].handle_destroy()
             self.buffer_dict.pop(buffer_id, None)
 
-    @dbus.service.method(EAF_DBUS_NAME, in_signature="s", out_signature="")
-    def send_key(self, args):
-        # Get buffer id and event string.
-        (buffer_id, event_string) = args.split(":")
-
+    @dbus.service.method(EAF_DBUS_NAME, in_signature="ss", out_signature="")
+    def send_key(self, buffer_id, event_string):
         # Send event to buffer when found match buffer.
         if buffer_id in self.buffer_dict:
-            self.buffer_dict[buffer_id].send_key_event(fake_key_event(event_string))
+            fake_key_event(event_string, self.buffer_dict[buffer_id])
+
+    @dbus.service.method(EAF_DBUS_NAME, in_signature="ss", out_signature="")
+    def send_keystroke(self, buffer_id, keystroke):
+        if buffer_id in self.buffer_dict:
+            self.buffer_dict[buffer_id].send_keystroke(keystroke)
 
     @dbus.service.method(EAF_DBUS_NAME, in_signature="sss", out_signature="")
     def handle_input_message(self, buffer_id, callback_type, callback_result):
@@ -207,6 +268,18 @@ class EAF(dbus.service.Object):
 
     @dbus.service.signal("com.lazycat.eaf")
     def input_message(self, buffer_id, message, callback_type):
+        pass
+
+    @dbus.service.signal("com.lazycat.eaf")
+    def create_new_browser_buffer(self, buffer_id):
+        pass
+
+    @dbus.service.signal("com.lazycat.eaf")
+    def request_kill_buffer(self, buffer_id):
+        pass
+
+    @dbus.service.signal("com.lazycat.eaf")
+    def message_to_emacs(self, message):
         pass
 
     def save_buffer_session(self, buf):

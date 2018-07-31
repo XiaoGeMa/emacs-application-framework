@@ -1,3 +1,17 @@
+## The Framework of EAF
+
+![img](../screenshot/framework.png)
+
+* QGraphicsScene similar Emacs' buffer, control content and state.
+* QGraphicsView similar Emacs' window, control size and position.
+* Every change in QGraphicsScene will synchronization to QGraphicsView in realtime by GPU composite.
+* We use Xlib XReparent technology stick QGraphicsView to Emacs frame.
+* Destroy QGraphicsView if emacs eaf-mode's window hide, create new QGraphicsView if eaf-mode window show, but QGraphicsScene still live in background until user kill eaf-mode buffer.
+* When user use mouse click on QGraphicsView, QGraphicsView will translate mouse event coordinate and pass mouse event to QGraphicsScene to handle.
+* When user use keyboard input in Emacs buffer, Emacs will key event to QGraphicsScene throught DBus IPC.
+* Elisp call Python function through DBus method.
+* Python call Elisp function through DBus signal.
+
 ## Why choose Qt?
 Qt's QGraphicsView and QGraphicsScene is awesome, it's easier to implement window composite than other GUI library (such as GTK+).
 
@@ -15,7 +29,10 @@ M-x eaf-open
 
     Then type "eaf-demo" as input, will pop hello world window in emacs like below:
 
-![img](./screenshot/hello_world.png)
+| Demo                                                  |
+| :--------:                                            |
+| <img src="../screenshot/hello_world.png" width="600"> |
+
 
     It's a big hello button, try to click it, haha.
 
@@ -35,8 +52,8 @@ from PyQt5.QtWidgets import QPushButton
 from core.buffer import Buffer
 
 class AppBuffer(Buffer):
-    def __init__(self, buffer_id, url):
-        Buffer.__init__(self, buffer_id, url, True, QColor(0, 0, 0, 255))
+    def __init__(self, buffer_id, url, arguments):
+        Buffer.__init__(self, buffer_id, url, arguments, True, QColor(0, 0, 0, 255))
 
         self.add_widget(QPushButton("Hello, EAF hacker, it's work!!!"))
         self.buffer_widget.setStyleSheet("font-size: 100px")
@@ -84,14 +101,22 @@ Above are all you need, happy hacking!
 
 ## Other APIs
 
+### Show message in emacs' minibuffer.
+
+If you want show message in emacs' minibuffer, you can emit AppBuffer's signal "message_to_emacs" like below:
+
+```Python
+self.message_to_emacs.emit("hello from eaf")
+```
+
 ### Read user's input
 Below is code example from pdfviewer:
 ```Python
 ...
 
 class AppBuffer(Buffer):
-    def __init__(self, buffer_id, url):
-        Buffer.__init__(self, buffer_id, url, False, QColor(0, 0, 0, 255))
+    def __init__(self, buffer_id, url, arguments):
+        Buffer.__init__(self, buffer_id, url, arguments, False, QColor(0, 0, 0, 255))
 
         self.add_widget(PdfViewerWidget(url, QColor(0, 0, 0, 255)))
         self.buffer_widget.send_jump_page_message.connect(self.send_jump_page_message)
@@ -169,6 +194,31 @@ You need implement interfaces "update_with_data" , below is an example of Org Pr
 ```
 
 Argument "update_data" is pass from elisp side.
+
+### Handle Emacs keystroke
+
+If you want handle keystroke send from Emacs, you just need implement interface "send_keystroke" of Buffer, below is an example of browser does:
+
+```Python
+    def send_keystroke(self, keystroke):
+        if keystroke == "M-f":
+            self.buffer_widget.forward()
+        elif keystroke == "M-b":
+            self.buffer_widget.back()
+```
+
+Argument "keystroke" is emacs key string.
+
+### Update progress.
+
+If your application will do some long-time operation, you can use below use below interfaces of buffer:
+
+```Python
+    def start_progress(self):
+    def stop_progress(self):
+    def update_progress(self, progress):
+```
+
 
 ## Todolist
 [Some works you can hacking ;)](TODOLIST.md)

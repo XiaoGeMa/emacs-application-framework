@@ -37,21 +37,17 @@ Using this framework, you can use PyQt develop powerful graphics programs to ext
 
 ## Installation
 
-1. Install python libraries:
+1. Install python dependences:
 
-### ArchLinux
+    Make sure python3 and pip has install in your operating system, then execute below command:
 
 ```Bash
-sudo pacman -S python-xlib python-pyqt5
-sudo pip install PyMuPDF grip qrcode
+    sudo pip install dbus-python PyMuPDF grip qrcode pyqt5 python-xlib
 ```
 
-### Debian
-
-```Bash
-sudo apt-get update
-sudo apt-get install python3-xlib python3-pyqt5
-sudo pip3 install PyMuPDF grip qrcode
+2. Clone this repository and add below code in your ~/.emacs
+```Elisp
+    (require 'eaf)
 ```
 
 ### Package description.
@@ -60,14 +56,14 @@ sudo pip3 install PyMuPDF grip qrcode
 | :--------    | :----                                            |
 | python-xlib  | Stick app window into emacs frame                |
 | python-pyqt5 | GUI library required for application development |
+| dbus-python  | DBus IPC for python and elisp                    |
 | PyMuPDF      | Render engine required for PDF Viewer            |
 | grip         | Markdown render server for Markdown Previewer    |
 | qrcode       | Render local file QR code                        |
 
-2. Clone this repository and add below code in your ~/.emacs
-```Elisp
-(require 'eaf)
-```
+### Or run EAF with docker
+
+If you prefer to run linux in a docker, you can read [Run EAF with docker](./docker/README.md)
 
 ### Why this awesome framework can't works with MacOS?
 There are mainly three obstacles:
@@ -76,37 +72,107 @@ There are mainly three obstacles:
 3. Qt5 QGraphicsView/QGraphicsScene can't work MacOS, specify QGraphicsVideoItem can't work.
 
 ## Usage
-| App                | Way to open                                   | Key                | Event                                    |
-| :--------          | :----                                         | :-----:            | :----                                    |
-| Browser            | URL                                           | Left Button        | Open link current tab                    |
-|                    |                                               | Ctrl + Left Button | Open link in new tab                     |
-| Markdown previewer | Type 'eaf-open' RET markdown filepath         |                    |                                          |
-| Org file previewer | Type 'eaf-open' RET org filepath              |                    |                                          |
-| Image Viewer       | Type 'eaf-open' RET IMAGE filepath            | j                  | Load next image in current directory     |
-|                    |                                               | k                  | Load previous image in current directory |
-| Video Player       | Type 'eaf-open' RET video filepath            | Space              | Play or Pause                            |
-|                    |                                               | h                  | Seek backward                            |
-|                    |                                               | l                  | Seek forward                             |
-| Pdf Viewer         | Type 'eaf-open' RET PDF filepath              | j                  | Scroll up                                |
-|                    |                                               | k                  | Scroll down                              |
-|                    |                                               | Space              | Scroll up page                           |
-|                    |                                               | b                  | Scroll down page                         |
-|                    |                                               | ,                  | Scroll to end                            |
-|                    |                                               | .                  | Scroll to home                           |
-|                    |                                               | t                  | Switch scale mode                        |
-|                    |                                               | -                  | Zoom out                                 |
-|                    |                                               | =                  | Zoom in                                  |
-|                    |                                               | 0                  | Zoomn reset                              |
-|                    |                                               | g                  | Goto page                                |
-| Camera             | Type 'eaf-camera'                             |                    |                                          |
-| Demo               | Type 'eaf-demo'                               |                    |                                          |
-| File Transfer      | Type 'eaf-show-file-qrcode'                   |                    |                                          |
-|                    | Or use `dired-show-file-qrcode' in dired mode |                    |                                          |
-| File Uploader      | Type 'eaf-upload-file'                        |                    |                                          |
-| Air Share          | Type 'eaf-air-share'                          |                    |                                          |
+```
+NOTE:
+EAF use DBus' session bus, it must running in general user.
+Please don't run EAF with root user, root user just can access DBus's system bus.
+```
+### Browser
+
+```
+Type 'eaf-open' RET www.google.com
+```
+
+| Browser Key        | Event                    |
+| :-----:            | :----                    |
+| Left Button        | Open link current tab    |
+| Ctrl + Left Button | Open link in new tab     |
+| M-f                | Forward page in history  |
+| M-b                | Backward page in history |
+| M-q                | Delete all cookies       |
+
+### PDF Viewer
+
+```
+Type 'eaf-open' RET pdf-filepath
+```
+
+| PDF Viewer Key | Event             |
+| :-----:        | :----             |
+| j              | Scroll up         |
+| k              | Scroll down       |
+| Space          | Scroll up page    |
+| b              | Scroll down page  |
+| ,              | Scroll to end     |
+| .              | Scroll to home    |
+| t              | Switch scale mode |
+| -              | Zoom out          |
+| =              | Zoom in           |
+| 0              | Zoomn reset       |
+| g              | Goto page         |
+| p              | Goto to percent   |
+| [              | Remember position |
+| ]              | Remember jump     |
+
+
+### Video Player
+
+```
+Type 'eaf-open' RET video-filepath
+```
+
+| Video Player Key | Event         |
+| :-----:          | :----         |
+| Space            | Play or Pause |
+| h                | Seek backward |
+| l                | Seek forward  |
+
+### Image Viewer
+```
+Type 'eaf-open' RET image-filepath
+```
+
+| Image Viewer Key | Event                                    |
+| :-----:          | :----                                    |
+| j                | Load next image in current directory     |
+| k                | Load previous image in current directory |
+
+### Other applications
+
+| Application Name   | Launch                                        |
+| :--------          | :----                                         |
+| Markdown previewer | Type 'eaf-open' RET markdown filepath         |
+| Org file previewer | Type 'eaf-open' RET org filepath              |
+| Camera             | Type 'eaf-camera'                             |
+| Demo               | Type 'eaf-demo'                               |
+| File Transfer      | Type 'eaf-show-file-qrcode'                   |
+|                    | Or use `dired-show-file-qrcode' in dired mode |
+| File Uploader      | Type 'eaf-upload-file'                        |
+| Air Share          | Type 'eaf-air-share'                          |
+
+## Settings
+
+### Proxy
+If you can't access most awesome internet service like me, you perhaps need proxy settings like below:
+
+```Elisp
+(setq eaf-http-proxy-host "127.0.0.1")
+(setq eaf-http-proxy-port "1080")
+```
+
+Then EAF browser are free. ;)
+
+### Markdown Previewer
+If you use markdown previewer, you need access [Personal access token](https://github.com/settings/tokens/new?scopes=), fill something in "Token description" and click button "Generate token" to get your personal token, then set token with code:
+
+```Elisp
+(setq eaf-grip-token "yourtokencode")
+```
+
+Otherwise, github will popup "times limit" error because so many peope use grip. ;)
 
 ## Report bug
-If you have any problem with eaf, please use command "emacs -Q" start Emacs first.
+If you have any problem with EAF, please use command "emacs -Q" start Emacs first.
 
 Then test again, if "emacs -Q" works fine, it's must be something wrong with your emacs config file.
 
@@ -119,7 +185,7 @@ Do you want to live in emacs more comfortably?
 
 Want to create unparalleled plugins to extend emacs?
 
-[Let's hacking together!](HACKING.md)
+[Let's hacking together!](./docs/HACKING.md)
 
 ## 打赏
 如果我的作品让你的生活充满快乐, 欢迎请我喝瓶啤酒, 哈哈哈哈

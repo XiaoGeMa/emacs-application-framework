@@ -19,8 +19,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import functools
 from PyQt5 import QtCore
+import functools
+import os
 
 class PostGui(QtCore.QObject):
 
@@ -49,16 +50,12 @@ class PostGui(QtCore.QObject):
         else:
             self._func(*args, **kwargs)
 
-def file_is_image(file_info):
-    for track in file_info.tracks:
-        if track.track_type == "Image":
-            return True
+def touch(path):
+    if not os.path.exists(path):
+        basedir = os.path.dirname(path)
 
-    return False
+        if not os.path.exists(basedir):
+            os.makedirs(basedir)
 
-def file_is_video(file_info):
-    for track in file_info.tracks:
-        if track.track_type == "Video":
-            return True
-
-    return False
+        with open(path, 'a'):
+            os.utime(path)

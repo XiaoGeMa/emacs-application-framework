@@ -20,15 +20,15 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from PyQt5 import QtCore
-from PyQt5.QtGui import QColor, QPixmap, QPainter
 from PyQt5.QtCore import QRect, Qt
+from PyQt5.QtGui import QColor, QPixmap, QPainter
 from PyQt5.QtWidgets import QWidget
-import os
 from core.buffer import Buffer
+import os
 
 class AppBuffer(Buffer):
-    def __init__(self, buffer_id, url):
-        Buffer.__init__(self, buffer_id, url, False, QColor(0, 0, 0, 255))
+    def __init__(self, buffer_id, url, arguments):
+        Buffer.__init__(self, buffer_id, url, arguments, False, QColor(0, 0, 0, 255))
 
         self.add_widget(ImageViewerWidget(url, QColor(0, 0, 0, 255)))
         self.buffer_widget.render_image.connect(self.change_title)
@@ -78,6 +78,7 @@ class ImageViewerWidget(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
 
+        painter.setPen(self.background_color)
         painter.setBrush(self.background_color)
         painter.drawRect(0, 0, self.rect().width(), self.rect().height())
 
